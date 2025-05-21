@@ -5,37 +5,51 @@ import {
 } from "material-react-table";
 import { useMemo } from "react";
 import sourceData from "./source-data.json";
-import type { SourceDataType, TableDataType } from "./types";
+import type { TableDataType } from "./types";
 
-/**
- * Example of how a tableData object should be structured.
- *
- * Each `row` object has the following properties:
- * @prop {string} person - The full name of the employee.
- * @prop {number} past12Months - The value for the past 12 months.
- * @prop {number} y2d - The year-to-date value.
- * @prop {number} may - The value for May.
- * @prop {number} june - The value for June.
- * @prop {number} july - The value for July.
- * @prop {number} netEarningsPrevMonth - The net earnings for the previous month.
- */
+const formatUtilizationRate = (rate: string | undefined): string =>
+  !rate || rate === "NaN" ? "-" : `${(parseFloat(rate) * 100).toFixed(0)}%`;
 
-const tableData: TableDataType[] = (
-  sourceData as unknown as SourceDataType[]
-).map((dataRow, index) => {
-  const person = `${dataRow?.employees?.firstname} - ...`;
+const formatEarnings = (amount: string | undefined): string =>
+  !amount ? "-" : `${parseFloat(amount).toFixed(0)} EUR`;
 
-  const row: TableDataType = {
-    person: `${person}`,
-    past12Months: `past12Months ${index} placeholder`,
-    y2d: `y2d ${index} placeholder`,
-    may: `may ${index} placeholder`,
-    june: `june ${index} placeholder`,
-    july: `july ${index} placeholder`,
-    netEarningsPrevMonth: `netEarningsPrevMonth ${index} placeholder`,
+const getMonthlyUtilizationRate = (data: any, month: string): string => {
+  const lastThreeMonths = data?.workforceUtilisation?.lastThreeMonthsIndividually;
+  if (!lastThreeMonths) return "-";
+
+  const capitalizedMonth = month.charAt(0).toUpperCase() + month.slice(1).toLowerCase();
+  const monthData = lastThreeMonths.find((m: any) => m.month === capitalizedMonth);
+  return monthData ? formatUtilizationRate(monthData.utilisationRate) : "-";
+};
+
+const getNetEarningsPrevMonth = (data: any): string => {
+  const monthlyCostDifference = data?.workforceUtilisation?.monthlyCostDifference;
+  if (!monthlyCostDifference) return "-";
+
+  const isExternal = data.hasOwnProperty('externals');
+  const value = parseFloat(monthlyCostDifference);
+  return isExternal ? formatEarnings(`-${Math.abs(value)}`) : formatEarnings(monthlyCostDifference);
+};
+
+const activePersons = sourceData.filter(
+  (item: any) => item.employees?.status === "active" || item.externals?.status === "active"
+);
+
+const tableData: TableDataType[] = activePersons.map((dataRow) => {
+  const personData = dataRow.employees || dataRow.externals;
+  if (!personData) return {} as TableDataType;
+
+  return {
+    person: dataRow.hasOwnProperty('externals')
+      ? `External ${personData.name}`
+      : personData.name,
+    past12Months: formatUtilizationRate(personData?.workforceUtilisation?.utilisationRateLastTwelveMonths),
+    y2d: formatUtilizationRate(personData?.workforceUtilisation?.utilisationRateYearToDate),
+    may: getMonthlyUtilizationRate(personData, "may"),
+    june: getMonthlyUtilizationRate(personData, "june"),
+    july: getMonthlyUtilizationRate(personData, "july"),
+    netEarningsPrevMonth: getNetEarningsPrevMonth(personData),
   };
-
-  return row;
 });
 
 const Example = () => {
